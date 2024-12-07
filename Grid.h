@@ -2,159 +2,115 @@
 #define GRID_H  
 
 #include <vector>  
-#include <iostream>  
-#include <fstream>  
-#include <stdexcept>  
 #include <string>  
-#include <sstream>  
-#include <SFML/Graphics.hpp>  
-
+#include <fstream>  
+#include <iostream> 
 class Grid {
-private:
-    std::vector<std::vector<bool>> cells;
-    int rows;
-    int cols;
-
-    int countLivingNeighbors(int x, int y);
-
 public:
-    Grid(int r, int c);
-    void initializeFromInput(const std::string& filename);
-    void update();
-    void draw(sf::RenderWindow& window, int cellSize) const;
-    void toggleCell(int mouseX, int mouseY, int cellSize);
-    void print() const;
-    void saveToFile(const std::string& directory, const std::string& baseFilename, int generation) const;
-
-    // Nouvelle méthode pour vérifier si toutes les cellules sont mortes  
-    bool areAllCellsDead() const;
-    bool validateGrid(int expectedAliveCount);
-    int countLivingCells() const; // Déclaration de la nouvelle méthode
+    Grid(int rows, int cols);
+    void toggleCell(int row, int col, int state); // 1 pour vivante, 0 pour morte  
+    void update(); // Met à jour l'état de la grille  
+    void initializeFromInput(const std::string& filename); // Initialise à partir d'un fichier  
+    void saveToFile(const std::string& dir, const std::string& filename, int generation); // Enregistre dans un fichier  
+    bool areAllCellsDead() const; // Vérifie si toutes les cellules sont mortes  
+    int countLivingCells() const; // Compte les cellules vivantes  
+    const std::vector<std::vector<int>>& getCells() const; // Fournit l'état des cellules  
     int getRows() const { return rows; }
     int getCols() const { return cols; }
-};  
+    bool compareWithExpectedState(const std::vector<std::vector<int>>& expectedState) const;
 
-Grid::Grid(int r, int c) : rows(r), cols(c) {
-    cells.resize(rows, std::vector<bool>(cols, false));
+    
+
+private:
+    int rows; // Nombre de lignes  
+    int cols; // Nombre de colonnes  
+    std::vector<std::vector<int>> cells; // 0 pour morte, 1 pour vivante  
+};
+
+#endif // GRID_H
+
+  
+
+Grid::Grid(int rows, int cols) : rows(rows), cols(cols) {
+    // Initialiser la grille avec toutes les cellules mortes  
+    cells.resize(rows, std::vector<int>(cols, 0));
 }
 
-int Grid::countLivingNeighbors(int x, int y) {
-    int livingNeighbors = 0;
-    for (int i = -1; i <= 1; ++i) {
-        for (int j = -1; j <= 1; ++j) {
-            if (i == 0 && j == 0) continue; // Ignore la cellule elle-même  
-
-            int newX = x + i;
-            int newY = y + j;
-            if (newX >= 0 && newX < rows && newY >= 0 && newY < cols) {
-                if (cells[newX][newY]) {
-                    livingNeighbors++;
-                }
-            }
-        }
+void Grid::toggleCell(int row, int col, int state) {
+    if (row >= 0 && row < rows && col >= 0 && col < cols) {
+        cells[row][col] = state; // state est 0 pour morte, 1 pour vivante  
     }
-    return livingNeighbors;
-}
-
-void Grid::initializeFromInput(const std::string& filename) {
-    std::ifstream file(filename);
-    if (!file.is_open()) {
-        throw std::runtime_error("Could not open file.");
-    }
-    for (int i = 0; i < rows; ++i) {
-        for (int j = 0; j < cols; ++j) {
-            int state;
-            file >> state;
-            cells[i][j] = (state == 1);
-        }
-    }
-    file.close();
 }
 
 void Grid::update() {
-    std::vector<std::vector<bool>> newCells = cells;
+    std::vector<std::vector<int>> newCells(rows, std::vector<int>(cols, 0)); // Nouvelle grille pour la mise à jour  
 
     for (int i = 0; i < rows; ++i) {
         for (int j = 0; j < cols; ++j) {
-            int livingNeighbors = countLivingNeighbors(i, j);
-            if (cells[i][j]) {
-                // Règle de survie  
-                if (livingNeighbors < 2 || livingNeighbors > 3) {
-                    newCells[i][j] = false;
+            int aliveNeighbors = 0;
+
+            // Compter les voisins vivants  
+            for (int ni = -1; ni <= 1; ++ni) {
+                for (int nj = -1; nj <= 1; ++nj) {
+                    if (ni == 0 && nj == 0) continue; // Ignorer la cellule elle-même  
+                    int newRow = i + ni;
+                    int newCol = j + nj;
+                    if (newRow >= 0 && newRow < rows && newCol >= 0 && newCol < cols) {
+                        aliveNeighbors += cells[newRow][newCol];
+                    }
                 }
             }
-            else {
-                // Règle de reproduction  
-                if (livingNeighbors == 3) {
-                    newCells[i][j] = true;
-                }
+
+            // Appliquer les règles de Conway pour décider de l'état futur  
+            if (cells[i][j] == 1) { // Cellule vivante  
+                newCells[i][j] = (aliveNeighbors == 2 || aliveNeighbors == 3) ? 1 : 0; // Reste vivante ou meurt  
+            }
+            else { // Cellule morte  
+                newCells[i][j] = (aliveNeighbors == 3) ? 1 : 0; // Devient vivante si 3 voisins vivants  
             }
         }
     }
+
+    // Mettre à jour l'état des cellules  
     cells = newCells;
 }
 
-void Grid::draw(sf::RenderWindow& window, int cellSize) const {
-    for (int i = 0; i < rows; ++i) {
-        for (int j = 0; j < cols; ++j) {
-            sf::RectangleShape cell(sf::Vector2f(cellSize, cellSize));
-            cell.setPosition(j * cellSize, i * cellSize);
-            cell.setFillColor(cells[i][j] ? sf::Color::White : sf::Color::Black);
-            window.draw(cell);
+void Grid::initializeFromInput(const std::string& filename) {
+    std::ifstream inFile(filename);
+    if (inFile.is_open()) {
+        inFile >> rows >> cols;
+        cells.resize(rows, std::vector<int>(cols, 0)); // Réinitialisation de la taille  
+        for (int i = 0; i < rows; ++i) {
+            for (int j = 0; j < cols; ++j) {
+                inFile >> cells[i][j]; // Lecture de chaque cellule  
+            }
         }
+        inFile.close();
     }
 }
 
-void Grid::toggleCell(int mouseX, int mouseY, int cellSize) {
-    int col = mouseX / cellSize;
-    int row = mouseY / cellSize;
-
-    if (row >= 0 && row < rows && col >= 0 && col < cols) {
-        cells[row][col] = !cells[row][col];
-    }
-}
-
-void Grid::print() const {
-    for (int i = 0; i < rows; ++i) {
-        for (int j = 0; j < cols; ++j) {
-            std::cout << (cells[i][j] ? "1 " : "0 ");
+void Grid::saveToFile(const std::string& dir, const std::string& filename, int generation) {
+    std::ofstream outFile(dir + "/" + filename + "_gen_" + std::to_string(generation) + ".txt");
+    if (outFile.is_open()) {
+        for (int i = 0; i < rows; ++i) {
+            for (int j = 0; j < cols; ++j) {
+                outFile << cells[i][j] << " "; // Écriture de l'état de la cellule dans le fichier  
+            }
+            outFile << "\n";
         }
-        std::cout << std::endl;
+        outFile.close();
     }
-    std::cout << "-----------------------" << std::endl;
 }
 
-void Grid::saveToFile(const std::string& directory, const std::string& baseFilename, int generation) const {
-    std::stringstream ss;
-    ss << directory << "/" << baseFilename << "_gen_" << generation << ".txt";
-
-    std::ofstream outFile(ss.str());
-    if (!outFile) {
-        std::cerr << "Erreur : Impossible d'ouvrir le fichier de sortie." << std::endl;
-        return;
-    }
-    for (int i = 0; i < rows; ++i) {
-        for (int j = 0; j < cols; ++j) {
-            outFile << (cells[i][j] ? "1 " : "0 ");
-        }
-        outFile << std::endl;
-    }
-    outFile.close();
-}
-
-// Implémentation de la méthode areAllCellsDead  
 bool Grid::areAllCellsDead() const {
     for (const auto& row : cells) {
         for (const auto& cell : row) {
-            if (cell) { // Si une cellule est vivante  
-                return false; // Retourne false si au moins une cellule est vivante  
-            }
+            if (cell == 1) return false; // Si une cellule est vivante, retourne faux  
         }
     }
-    return true; // Retourne true si toutes les cellules sont mortes  
+    return true; // Toutes les cellules sont mortes  
 }
 
-// Méthode pour compter les cellules vivantes  
 int Grid::countLivingCells() const {
     int count = 0;
     for (const auto& row : cells) {
@@ -167,8 +123,24 @@ int Grid::countLivingCells() const {
     return count;
 }
 
-bool Grid::validateGrid(int expectedAliveCount) {
-    return countLivingCells() == expectedAliveCount;
+const std::vector<std::vector<int>>& Grid::getCells() const {
+    return cells; // Renvoie une référence constante à l'état des cellules  
 }
 
-#endif // GRID_H
+// Grid.cpp  
+bool Grid::compareWithExpectedState(const std::vector<std::vector<int>>& expectedState) const {
+    if (expectedState.size() != cells.size()) {
+        return false; // Different number of rows  
+    }
+    for (size_t i = 0; i < expectedState.size(); ++i) {
+        if (expectedState[i].size() != cells[i].size()) {
+            return false; // Different number of columns in row i  
+        }
+        for (size_t j = 0; j < expectedState[i].size(); ++j) {
+            if (cells[i][j] != expectedState[i][j]) {
+                return false; // Cells do not match  
+            }
+        }
+    }
+    return true; // All cells match  
+}

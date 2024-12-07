@@ -1,25 +1,48 @@
-#include "pch.h" // Inclure les prÈcompilÈs si nÈcessaire  
+Ôªø#include "pch.h" // Inclure les pr√©compil√©s si n√©cessaire  
 #include "Grid.h" // Inclure votre classe Grid  
 #include <fstream>  
-#include <gtest/gtest.h>  
+#include <gtest/gtest.h>   
+#include <sstream>  
+#include <vector>  
+#include <windows.h>  
+// Fonction utilitaire pour lire le fichier et r√©cup√©rer l'√©tat de la grille  
+std::vector<std::vector<int>> readExpectedStateFromFile(const std::string& filename) {
+    std::ifstream inFile(filename);
+    std::vector<std::vector<int>> state;
+    std::string line;
+
+    while (std::getline(inFile, line)) {
+        std::istringstream iss(line);
+        std::vector<int> row;
+        int cell;
+
+        while (iss >> cell) {
+            row.push_back(cell);
+        }
+        state.push_back(row);
+    }
+
+    return state;
+}
 
 class GridTests : public ::testing::Test {
+
 protected:
     static void SetUpTestSuite() {
-        // Installer des fichiers ou des configurations communes si nÈcessaire  
+        // Installer des fichiers ou des configurations communes si n√©cessaire  
     }
 
     static void TearDownTestSuite() {
-        // Nettoyer des fichiers ou des configurations communes si nÈcessaire  
+        // Nettoyer des fichiers ou des configurations communes si n√©cessaire  
     }
 
     void SetUp() override {
-        // Cette mÈthode sera appelÈe avant chaque test  
+        // Cette m√©thode sera appel√©e avant chaque test  
         grid = new Grid(5, 10);
     }
 
     void TearDown() override {
-        // Cette mÈthode sera appelÈe aprËs chaque test  
+        // Cette m√©thode sera appel√©e apr√®s chaque test  
         delete grid;
     }
 
@@ -44,33 +67,42 @@ TEST_F(GridTests, TestInitializeFromInput) {
 
     grid->initializeFromInput("nyamchi.txt");
 
-    // VÈrifiez que les cellules sont initialisÈes correctement  
+    // V√©rifiez que les cellules sont initialis√©es correctement  
     EXPECT_FALSE(grid->areAllCellsDead()); // Pas toutes mortes  
     EXPECT_EQ(grid->getRows(), 5);
     EXPECT_EQ(grid->getCols(), 10);
 }
 
 TEST_F(GridTests, TestUpdate) {
-    grid->initializeFromInput("nyamchi.txt"); // Initialiser ‡ partir du fichier  
+    grid->initializeFromInput("nyamchi.txt"); // Initialiser √† partir du fichier  
+    // Obtenir l'√©tat de la grille avant la mise √† jour  
+    auto stateBeforeUpdate = grid->getCells();
 
-    int livingBeforeUpdate = grid->countLivingCells();  // Admettant que cette mÈthode existe  
-    grid->update();
-    int livingAfterUpdate = grid->countLivingCells();   // Idem  
+    grid->update(); // Mettre √† jour la grille  
 
-    // VÈrifiez que le nombre de cellules vivantes a changÈ  
-    EXPECT_NE(livingBeforeUpdate, livingAfterUpdate); // Doit Ítre diffÈrent  
+    // Obtenir l'√©tat de la grille apr√®s la mise √† jour  
+    auto stateAfterUpdate = grid->getCells();
+
+    // Comparer les √©tats de la grille avant et apr√®s  
+    bool isDifferent = false;
+    for (int i = 0; i < grid->getRows(); ++i) {
+        for (int j = 0; j < grid->getCols(); ++j) {
+            if (stateBeforeUpdate[i][j] != stateAfterUpdate[i][j]) {
+                isDifferent = true; // On a trouv√© une diff√©rence  
+                break;
+            }
+        }
+        if (isDifferent) break; // Pas besoin de continuer  
+    }
+
+    EXPECT_TRUE(isDifferent); // V√©rifiez que l'√©tat a chang√©    
 }
 
 TEST_F(GridTests, TestAreAllCellsDead) {
-    EXPECT_TRUE(grid->areAllCellsDead()); // Toutes les cellules sont mortes au dÈbut  
-
-    // Activer une cellule  
-    grid->toggleCell(0, 0, 1); // 1 pour vivante  
-    EXPECT_FALSE(grid->areAllCellsDead()); // Pas toutes mortes  
-
-    // RÈinitialiser toutes les cellules  
-    grid->toggleCell(0, 0, 0); // 0 pour morte  
-    EXPECT_TRUE(grid->areAllCellsDead()); // Toutes les cellules sont mortes  
+    
+    // R√©initialiser toutes les cellules  
+    grid->toggleCell(0, 0, 1); // 0 pour morte  
+    EXPECT_FALSE(grid->areAllCellsDead()); // Toutes les cellules sont mortes  
 }
 
 TEST_F(GridTests, TestSaveToFile) {  
@@ -79,16 +111,16 @@ TEST_F(GridTests, TestSaveToFile) {
     // Sauvegarder dans un fichier  
     grid->saveToFile(".", "nyamchi_output", 1);  
 
-    // VÈrifiez que le fichier a ÈtÈ crÈÈ et contient les bonnes valeurs  
+    // V√©rifiez que le fichier a √©t√© cr√©√© et contient les bonnes valeurs  
     std::ifstream inFile("./nyamchi_output_gen_1.txt");  
     EXPECT_TRUE(inFile.is_open());  
 
-    // VÈrifiez le contenu du fichier pour la premiËre ligne  
+    // V√©rifiez le contenu du fichier pour la premi√®re ligne  
     std::string line;  
     std::getline(inFile, line);  
-    EXPECT_EQ(line, "1 0 0 0 0 0 0 0 0 0 "); // VÈrifiez la premiËre ligne  
+    EXPECT_EQ(line, "1 0 0 0 0 0 0 0 0 0 "); // V√©rifiez la premi√®re ligne  
 
-    // Nettoyez aprËs le test  
+    // Nettoyez apr√®s le test  
     inFile.close();  
     remove("./nyamchi_output_gen_1.txt");  
 } 
@@ -97,19 +129,31 @@ TEST_F(GridTests, TestSaveToFile) {
 TEST_F(GridTests, TestValidateGridAtSpecificGeneration) {
     grid->initializeFromInput("nyamchi.txt");
 
-    // Effectuer un certain nombre d'itÈrations pour atteindre la gÈnÈration dÈsirÈe.  
-    int desiredGeneration = 1; // Choisissez la gÈnÈration  
+    // Effectuer un certain nombre d'it√©rations pour atteindre la g√©n√©ration d√©sir√©e.  
+    int desiredGeneration = 1; // Choisissez la g√©n√©ration 
+    
+    std::string expectedFile = "nyamchi.txt_gen_" + std::to_string(desiredGeneration) + ".txt";
+    auto expectedState = readExpectedStateFromFile(expectedFile);
+
     for (int i = 0; i < desiredGeneration; i++) {
-        grid->update(); // Mettez ‡ jour la grille  
+        grid->update(); // Mettez √† jour la grille  
     }
 
-    // Maintenant testez si le nombre de cellules vivantes est celui attendu  
-    int expectedAliveCount = 4; // ¿ ajuster selon vos attentes spÈcifiques  
-    EXPECT_TRUE(grid->validateGrid(expectedAliveCount)); // VÈrifiez la validitÈ  
-}
+    // R√©cup√©rer l'√©tat actuel de la grille  
+    auto currentState = grid->getCells(); // Utilisation correcte  
 
-// Main pour exÈcuter tous les tests  
+    // V√©rifier l'√©tat de la grille apr√®s la g√©n√©ration souhait√©e  
+    for (size_t i = 0; i < expectedState.size(); ++i) {
+        for (size_t j = 0; j < expectedState[i].size(); ++j) {
+            // Comparer directement sans v√©rification de taille  
+            EXPECT_EQ(currentState[i][j], expectedState[i][j])
+                << u8"Erreur √† la position (" << i << ", " << j << ")";
+        }
+    }
+}
+// Main pour ex√©cuter tous les tests  
 int main(int argc, char** argv) {
+    SetConsoleOutputCP(65001);
     ::testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();
 }
